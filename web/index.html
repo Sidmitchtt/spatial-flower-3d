@@ -118,8 +118,9 @@
 
         // Ajustar tamaño de puntos para que sean visibles
         const material = new THREE.PointsMaterial({
-          size: 0.04,
-          vertexColors: geometry.hasAttribute('color')
+          size: 0.15, // Aumentado significativamente para destacar la estructura 3D
+          vertexColors: geometry.hasAttribute('color'),
+          sizeAttenuation: true
         });
 
         const pointCloud = new THREE.Points(geometry, material);
