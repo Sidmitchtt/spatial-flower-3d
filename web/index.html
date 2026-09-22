@@ -54,13 +54,19 @@
       font-weight: 600;
     }
 
+    #status {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      color: #00f2fe;
+    }
+
     #canvas-container {
       width: 100%;
       height: 100%;
     }
   </style>
 
-  <!-- Cargar Three.js y OrbitControls desde CDN -->
+  <!-- Cargar Three.js y dependencias -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
@@ -71,64 +77,85 @@
     <span class="badge">Spatial AI & 3D Reconstruction</span>
     <h1>Jarrón de Flores (Point Cloud)</h1>
     <p>Reconstrucción 3D generada a partir de fotografías usando Structure-from-Motion (COLMAP) y procesamiento en la nube.</p>
-    <p style="font-size: 0.75rem; color: #888;">💡 Usa el clic izquierdo/pantalla táctil para rotar y la rueda para hacer zoom.</p>
+    <div id="status">⏳ Cargando modelo 3D...</div>
+    <p style="font-size: 0.75rem; color: #888; margin-top: 10px;">💡 Usa el clic izquierdo/pantalla táctil para rotar y la rueda para hacer zoom.</p>
   </div>
 
   <div id="canvas-container"></div>
 
   <script>
-    // 1. Configuración de la escena, cámara y renderizador
     const container = document.getElementById('canvas-container');
+    const statusText = document.getElementById('status');
+
+    // 1. Escena, Cámara y Renderizador
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111115);
 
-    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.01, 1000);
-    camera.position.set(0, 0, 3);
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 1000);
+    camera.position.set(0, 0, 5);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
 
-    // 2. Controles de órbita (Mouse / Táctil)
+    // 2. Controles de Órbita
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
 
-    // 3. Cargar el archivo .ply generado
+    // 3. Cargar el archivo .ply
     const loader = new THREE.PLYLoader();
+    
+    // Probar ambas rutas comunes por compatibilidad de mayúsculas/minúsculas
+    const plyPath = './Model/jarron_flores.ply';
+
     loader.load(
-      './Model/jarron_flores.ply',
+      plyPath,
       function (geometry) {
         geometry.computeVertexNormals();
+        geometry.center(); // Centrar origen en (0,0,0)
 
-        // Material para renderizar la nube de puntos 3D
+        // Ajustar tamaño de puntos para que sean visibles
         const material = new THREE.PointsMaterial({
-          size: 0.015,
-          vertexColors: true
+          size: 0.04,
+          vertexColors: geometry.hasAttribute('color')
         });
 
         const pointCloud = new THREE.Points(geometry, material);
-        
-        // Centrar el modelo automáticamente
-        geometry.center();
         scene.add(pointCloud);
 
-        console.log('✅ Modelo 3D cargado correctamente');
+        // Ajustar cámara al tamaño delimitador del objeto
+        geometry.computeBoundingSphere();
+        const sphere = geometry.boundingSphere;
+        if (sphere) {
+          const radius = sphere.radius;
+          camera.position.set(0, 0, radius * 2.5);
+          controls.target.set(0, 0, 0);
+          controls.update();
+        }
+
+        statusText.innerHTML = "✅ Modelo 3D cargado con éxito";
+        statusText.style.color = "#00ff88";
       },
       function (xhr) {
-        console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+        if (xhr.lengthComputable) {
+          const percent = Math.round((xhr.loaded / xhr.total) * 100);
+          statusText.innerHTML = `⏳ Cargando modelo: ${percent}%`;
+        }
       },
       function (error) {
-        console.error('❌ Error cargando el archivo PLY:', error);
+        console.error('Error cargando PLY:', error);
+        statusText.innerHTML = "❌ Error cargando el archivo .ply. Revisa la ruta o las mayúsculas.";
+        statusText.style.color = "#ff4444";
       }
     );
 
-    // 4. Luces ambientales
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    // 4. Luces
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
 
-    // 5. Loop de animación
+    // 5. Animación Loop
     function animate() {
       requestAnimationFrame(animate);
       controls.update();
@@ -136,7 +163,6 @@
     }
     animate();
 
-    // Redimensionar ventana
     window.addEventListener('resize', onWindowResize, false);
     function onWindowResize() {
       camera.aspect = window.innerWidth / window.innerHeight;
