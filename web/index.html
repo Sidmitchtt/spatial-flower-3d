@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reconstrucción 3D - Jarrón de Flores | Spatial AI</title>
+  <title>Reconstrucción 3D - Catálogo Floral | Spatial AI</title>
   <style>
     body {
       margin: 0;
@@ -66,7 +66,7 @@
     }
   </style>
 
-  <!-- Cargar Three.js y dependencias -->
+  <!-- Librerías de Three.js y visores WebGL desde CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
@@ -74,11 +74,11 @@
 <body>
 
   <div id="info-panel">
-    <span class="badge">Spatial AI & 3D Reconstruction</span>
-    <h1>Jarrón de Flores (Point Cloud)</h1>
-    <p>Reconstrucción 3D generada a partir de fotografías usando Structure-from-Motion (COLMAP) y procesamiento en la nube.</p>
+    <span class="badge">Spatial AI & 3D Catalog</span>
+    <h1>Ramo de Rosas (Aislado 3D)</h1>
+    <p>Visualizador 3D de catálogo comercial filtrado mediante radio espacial en WebGL.</p>
     <div id="status">⏳ Cargando modelo 3D...</div>
-    <p style="font-size: 0.75rem; color: #888; margin-top: 10px;">💡 Usa el clic izquierdo/pantalla táctil para rotar y la rueda para hacer zoom.</p>
+    <p style="font-size: 0.75rem; color: #888; margin-top: 10px;">💡 Clic izquierdo para rotar | Rueda para zoom.</p>
   </div>
 
   <div id="canvas-container"></div>
@@ -87,13 +87,11 @@
     const container = document.getElementById('canvas-container');
     const statusText = document.getElementById('status');
 
-    // 1. Escena, Cámara y Renderizador
+    // 1. Configuración de Escena, Cámara y Renderizador
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111115);
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.001, 1000);
-    camera.position.set(0, 0, 5);
-
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
@@ -104,59 +102,86 @@
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
 
-    // 3. Cargar el archivo .ply
+    // 3. Cargar y Filtrar el Archivo PLY
     const loader = new THREE.PLYLoader();
-    
-    // Probar ambas rutas comunes por compatibilidad de mayúsculas/minúsculas
     const plyPath = './Model/ramo_denso.ply';
 
     loader.load(
       plyPath,
       function (geometry) {
         geometry.computeVertexNormals();
-        geometry.center(); // Centrar origen en (0,0,0)
+        geometry.center(); // Centra el ramo en el punto de origen (0,0,0)
 
-        // Ajustar tamaño de puntos para que sean visibles
+        const positions = geometry.attributes.position;
+        const colors = geometry.attributes.color;
+
+        const filteredPositions = [];
+        const filteredColors = [];
+
+        // --- PARÁMETRO DE AISLAMIENTO DEL RAMO ---
+        // Radio máximo en metros alrededor del centro del ramo (Ajusta a 0.3 o 0.4 si quieres más o menos detalle)
+        const MAX_RADIUS = 0.35; 
+
+        for (let i = 0; i < positions.count; i++) {
+          const x = positions.getX(i);
+          const y = positions.getY(i);
+          const z = positions.getZ(i);
+
+          // Cálculo de distancia euclidiana de cada punto al centro
+          const distance = Math.sqrt(x * x + y * y + z * z);
+
+          // Si el punto pertenece al ramo (está cerca del centro), se conserva
+          if (distance <= MAX_RADIUS) {
+            filteredPositions.push(x, y, z);
+            if (colors) {
+              filteredColors.push(colors.getX(i), colors.getY(i), colors.getZ(i));
+            }
+          }
+        }
+
+        // Crear geometría nueva limpia de fondo
+        const cleanGeometry = new THREE.BufferGeometry();
+        cleanGeometry.setAttribute('position', new THREE.Float32BufferAttribute(filteredPositions, 3));
+        if (colors) {
+          cleanGeometry.setAttribute('color', new THREE.Float32BufferAttribute(filteredColors, 3));
+        }
+
+        // Material con puntos más tupidos para darle consistencia visual a las rosas
         const material = new THREE.PointsMaterial({
-          size: 0.15, // Aumentado significativamente para destacar la estructura 3D
-          vertexColors: geometry.hasAttribute('color'),
+          size: 0.025,
+          vertexColors: cleanGeometry.hasAttribute('color'),
           sizeAttenuation: true
         });
 
-        const pointCloud = new THREE.Points(geometry, material);
+        const pointCloud = new THREE.Points(cleanGeometry, material);
         scene.add(pointCloud);
 
-        // Ajustar cámara al tamaño delimitador del objeto
-        geometry.computeBoundingSphere();
-        const sphere = geometry.boundingSphere;
-        if (sphere) {
-          const radius = sphere.radius;
-          camera.position.set(0, 0, radius * 2.5);
-          controls.target.set(0, 0, 0);
-          controls.update();
-        }
+        // Posicionar la cámara enfocado directamente en el arreglo aislado
+        camera.position.set(0, 0.2, 0.8);
+        controls.target.set(0, 0, 0);
+        controls.update();
 
-        statusText.innerHTML = "✅ Modelo 3D cargado con éxito";
+        statusText.innerHTML = "✅ Ramo aislado cargado con éxito";
         statusText.style.color = "#00ff88";
       },
       function (xhr) {
         if (xhr.lengthComputable) {
           const percent = Math.round((xhr.loaded / xhr.total) * 100);
-          statusText.innerHTML = `⏳ Cargando modelo: ${percent}%`;
+          statusText.innerHTML = `⏳ Filtrando y cargando: ${percent}%`;
         }
       },
       function (error) {
-        console.error('Error cargando PLY:', error);
-        statusText.innerHTML = "❌ Error cargando el archivo .ply. Revisa la ruta o las mayúsculas.";
+        console.error('Error cargando el archivo PLY:', error);
+        statusText.innerHTML = "❌ Error al cargar ramo_denso.ply";
         statusText.style.color = "#ff4444";
       }
     );
 
-    // 4. Luces
+    // 4. Luces ambientales
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
     scene.add(ambientLight);
 
-    // 5. Animación Loop
+    // 5. Bucle de Renderizado
     function animate() {
       requestAnimationFrame(animate);
       controls.update();
