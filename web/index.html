@@ -156,6 +156,10 @@
         });
 
         const pointCloud = new THREE.Points(cleanGeometry, material);
+
+        // Rotar el ramo 180 grados en X para ponerlo derecho
+        pointCloud.rotation.x = Math.PI; // 180° en radianes
+
         scene.add(pointCloud);
 
         // Enfocar la cámara dinámicamente según el tamaño del ramo
