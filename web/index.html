@@ -66,7 +66,7 @@
     }
   </style>
 
-  <!-- Librerías de Three.js y visores WebGL desde CDN -->
+  <!-- Librerías WebGL -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
@@ -76,8 +76,8 @@
   <div id="info-panel">
     <span class="badge">Spatial AI & 3D Catalog</span>
     <h1>Ramo de Rosas (Aislado 3D)</h1>
-    <p>Visualizador 3D de catálogo comercial filtrado mediante radio espacial en WebGL.</p>
-    <div id="status">⏳ Cargando modelo 3D...</div>
+    <p>Visualizador 3D de catálogo comercial filtrado dinámicamente en WebGL.</p>
+    <div id="status">⏳ Cargando y filtrando modelo...</div>
     <p style="font-size: 0.75rem; color: #888; margin-top: 10px;">💡 Clic izquierdo para rotar | Rueda para zoom.</p>
   </div>
 
@@ -110,7 +110,11 @@
       plyPath,
       function (geometry) {
         geometry.computeVertexNormals();
-        geometry.center(); // Centra el ramo en el punto de origen (0,0,0)
+        geometry.center(); // Centra el centroide en (0,0,0)
+
+        // Calcular la esfera delimitadora para obtener la escala real del modelo
+        geometry.computeBoundingSphere();
+        const maxRadius = geometry.boundingSphere.radius;
 
         const positions = geometry.attributes.position;
         const colors = geometry.attributes.color;
@@ -118,20 +122,18 @@
         const filteredPositions = [];
         const filteredColors = [];
 
-        // --- PARÁMETRO DE AISLAMIENTO DEL RAMO ---
-        // Radio máximo en metros alrededor del centro del ramo (Ajusta a 0.3 o 0.4 si quieres más o menos detalle)
-        const MAX_RADIUS = 0.35; 
+        // Conservar únicamente el 35% interno del radio total (donde se concentra el ramo)
+        const CROP_RATIO = 0.35; 
+        const cutoffRadius = maxRadius * CROP_RATIO;
 
         for (let i = 0; i < positions.count; i++) {
           const x = positions.getX(i);
           const y = positions.getY(i);
           const z = positions.getZ(i);
 
-          // Cálculo de distancia euclidiana de cada punto al centro
           const distance = Math.sqrt(x * x + y * y + z * z);
 
-          // Si el punto pertenece al ramo (está cerca del centro), se conserva
-          if (distance <= MAX_RADIUS) {
+          if (distance <= cutoffRadius) {
             filteredPositions.push(x, y, z);
             if (colors) {
               filteredColors.push(colors.getX(i), colors.getY(i), colors.getZ(i));
@@ -139,16 +141,16 @@
           }
         }
 
-        // Crear geometría nueva limpia de fondo
+        // Crear geometría filtrada
         const cleanGeometry = new THREE.BufferGeometry();
         cleanGeometry.setAttribute('position', new THREE.Float32BufferAttribute(filteredPositions, 3));
         if (colors) {
           cleanGeometry.setAttribute('color', new THREE.Float32BufferAttribute(filteredColors, 3));
         }
 
-        // Material con puntos más tupidos para darle consistencia visual a las rosas
+        // Ajustar el tamaño de los puntos proporcional a la escala del modelo
         const material = new THREE.PointsMaterial({
-          size: 0.025,
+          size: maxRadius * 0.008,
           vertexColors: cleanGeometry.hasAttribute('color'),
           sizeAttenuation: true
         });
@@ -156,8 +158,8 @@
         const pointCloud = new THREE.Points(cleanGeometry, material);
         scene.add(pointCloud);
 
-        // Posicionar la cámara enfocado directamente en el arreglo aislado
-        camera.position.set(0, 0.2, 0.8);
+        // Enfocar la cámara dinámicamente según el tamaño del ramo
+        camera.position.set(0, cutoffRadius * 0.5, cutoffRadius * 2.2);
         controls.target.set(0, 0, 0);
         controls.update();
 
